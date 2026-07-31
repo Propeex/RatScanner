@@ -72,7 +72,7 @@ internal static class ForkBootstrap {
 		foreach (LanguageCode language in Enum.GetValues<LanguageCode>()) {
 			foreach (GameMode gameMode in Enum.GetValues<GameMode>()) {
 				string itemCache = gameMode == GameMode.Pve ? pveCache : regularCache;
-				RatConfig.WriteToCache($"items_{language}_{gameMode}", itemCache);
+				EnsureItemCache($"items_{language}_{gameMode}", itemCache);
 				EnsureEmptyCache($"tasks_{language}_{gameMode}");
 				EnsureEmptyCache($"hideout_{language}_{gameMode}");
 				EnsureEmptyCache($"maps_{language}_{gameMode}");
@@ -80,6 +80,11 @@ internal static class ForkBootstrap {
 		}
 
 		return true;
+	}
+
+	private static void EnsureItemCache(string key, string fallbackCache) {
+		if (RatConfig.ReadFromCache(key, out string existing) && ValidateItemCache(existing)) return;
+		RatConfig.WriteToCache(key, fallbackCache);
 	}
 
 	private static void EnsureEmptyCache(string key) {
@@ -151,7 +156,7 @@ internal static class ForkBootstrap {
 			["data"] = new JObject {
 				["data"] = sanitizedItems,
 			},
-		}.ToString(Formatting.None);
+		}.ToString(Newtonsoft.Json.Formatting.None);
 	}
 
 	private static JToken? Translate(JToken? source, JObject locale) {
@@ -161,8 +166,12 @@ internal static class ForkBootstrap {
 	}
 
 	private static bool ValidateItemCache(string json) {
-		FallbackResponse<Item>? response = JsonConvert.DeserializeObject<FallbackResponse<Item>>(json, JsonSettings);
-		return response?.Data?.Data?.Length > 0 && response.Data.Data.All(item => !string.IsNullOrWhiteSpace(item?.Id));
+		try {
+			FallbackResponse<Item>? response = JsonConvert.DeserializeObject<FallbackResponse<Item>>(json, JsonSettings);
+			return response?.Data?.Data?.Length > 0 && response.Data.Data.All(item => !string.IsNullOrWhiteSpace(item?.Id));
+		} catch {
+			return false;
+		}
 	}
 
 	private sealed class FallbackResponse<T> {

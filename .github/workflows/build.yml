@@ -36,8 +36,29 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      - name: Publish
-        run: dotnet publish RatScanner/RatScanner.csproj -c Release -o publish -p:PublishSingleFile=true --runtime win-x64 --self-contained
+      - name: Publish with GraphQL schema retry
+        shell: pwsh
+        run: |
+          $maxAttempts = 4
+
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            Write-Host "Publish attempt $attempt of $maxAttempts"
+            Remove-Item publish -Recurse -Force -ErrorAction SilentlyContinue
+
+            dotnet publish RatScanner/RatScanner.csproj -c Release -o publish -p:PublishSingleFile=true --runtime win-x64 --self-contained --no-restore
+            if ($LASTEXITCODE -eq 0) {
+              exit 0
+            }
+
+            if ($attempt -eq $maxAttempts) {
+              Write-Error "Publish failed after $maxAttempts attempts. The tarkov.dev GraphQL schema endpoint may be unavailable."
+              exit 1
+            }
+
+            $delaySeconds = 15 * [Math]::Pow(2, $attempt - 1)
+            Write-Warning "Publish failed. Retrying in $delaySeconds seconds."
+            Start-Sleep -Seconds $delaySeconds
+          }
 
       - name: Include data
         shell: pwsh

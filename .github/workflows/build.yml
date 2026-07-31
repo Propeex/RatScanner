@@ -47,8 +47,15 @@ jobs:
             throw "Unable to download the pinned Tarkov.dev GraphQL schema."
           }
 
-          npm install --prefix .github/schema-server --ignore-scripts --no-audit --no-fund
-          if ($LASTEXITCODE -ne 0) {
+          Push-Location ".github/schema-server"
+          try {
+            npm install --ignore-scripts --no-audit --no-fund
+            $npmExitCode = $LASTEXITCODE
+          } finally {
+            Pop-Location
+          }
+
+          if ($npmExitCode -ne 0) {
             throw "Unable to install the local GraphQL schema server dependency."
           }
 

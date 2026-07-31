@@ -123,6 +123,15 @@ jobs:
             }
           }
 
+      - name: Validate bundled fallback
+        shell: pwsh
+        run: |
+          $env:RATSCANNER_VALIDATE_FALLBACK = "1"
+          & "./publish/RatScanner.exe"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Bundled fallback validation failed with exit code $LASTEXITCODE"
+          }
+
       - name: Zip content
         run: 7z a -r RatScanner.zip ./publish/*
 
@@ -131,17 +140,6 @@ jobs:
         with:
           name: RatScanner-${{ steps.version.outputs.version }}
           path: ./publish/
-
-      - name: Upload source snapshot
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: RatScanner-source-${{ github.sha }}
-          path: |
-            .
-            !.git/
-            !publish/
-            !RatScanner.zip
 
       - name: Publish release
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'

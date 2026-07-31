@@ -10,3 +10,5 @@ The `Build` workflow performs the following steps:
 4. Creates a GitHub release named `RatScanner v<version>` with `RatScanner.zip` attached.
 
 Pull requests run the same build without publishing a release.
+
+Workflow validation was retriggered after enabling GitHub Actions for this fork.

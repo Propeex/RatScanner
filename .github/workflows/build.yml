@@ -26,6 +26,11 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22.x
+
       - name: Read version
         id: version
         shell: pwsh
@@ -33,11 +38,64 @@ jobs:
           $version = (Select-Xml -Path "RatScanner/RatScanner.csproj" -XPath "/Project/PropertyGroup/Version").Node.InnerText
           "version=$version" >> $env:GITHUB_OUTPUT
 
-      - name: Restore dependencies
-        run: dotnet restore
+      - name: Prepare pinned Tarkov.dev schema
+        shell: pwsh
+        run: |
+          $schemaUrl = "https://raw.githubusercontent.com/the-hideout/tarkov-api/edc4f1a4e98fec4b17f86f9a2cc9b7ba6f0e4c3f/schema-static.mjs"
+          curl.exe --fail --location --retry 4 --retry-delay 5 $schemaUrl --output ".github/schema-server/schema-static.mjs"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Unable to download the pinned Tarkov.dev GraphQL schema."
+          }
 
-      - name: Publish
-        run: dotnet publish RatScanner/RatScanner.csproj -c Release -o publish -p:PublishSingleFile=true --runtime win-x64 --self-contained
+          Push-Location ".github/schema-server"
+          try {
+            npm install --ignore-scripts --no-audit --no-fund
+            $npmExitCode = $LASTEXITCODE
+          } finally {
+            Pop-Location
+          }
+
+          if ($npmExitCode -ne 0) {
+            throw "Unable to install the local GraphQL schema server dependency."
+          }
+
+      - name: Restore dependencies
+        run: dotnet restore RatScanner/RatScanner.csproj --runtime win-x64
+
+      - name: Publish with local GraphQL schema
+        shell: pwsh
+        run: |
+          $schemaEndpoint = "http://127.0.0.1:43117/graphql"
+          $schemaServer = Start-Process node -ArgumentList ".github/schema-server/server.mjs" -PassThru -NoNewWindow
+          $publishExitCode = 1
+
+          try {
+            $ready = $false
+            for ($attempt = 1; $attempt -le 20; $attempt++) {
+              try {
+                $health = Invoke-WebRequest "http://127.0.0.1:43117/health" -UseBasicParsing -TimeoutSec 2
+                if ($health.StatusCode -eq 200) {
+                  $ready = $true
+                  break
+                }
+              } catch {
+                Start-Sleep -Milliseconds 500
+              }
+            }
+
+            if (-not $ready) {
+              throw "The local Tarkov.dev GraphQL schema server did not start."
+            }
+
+            dotnet publish RatScanner/RatScanner.csproj -c Release -o publish -p:PublishSingleFile=true --runtime win-x64 --self-contained --no-restore "-p:GraphQlClientGenerator_ServiceUrl=$schemaEndpoint"
+            $publishExitCode = $LASTEXITCODE
+          } finally {
+            if ($null -ne $schemaServer -and -not $schemaServer.HasExited) {
+              Stop-Process -Id $schemaServer.Id -Force
+            }
+          }
+
+          exit $publishExitCode
 
       - name: Include data
         shell: pwsh

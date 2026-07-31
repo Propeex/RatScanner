@@ -1,0 +1,8 @@
+{
+  "name": "ratscanner-tarkov-schema-server",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "graphql": "16.9.0"
+  }
+}

@@ -20,6 +20,7 @@ namespace RatScanner;
 /// </summary>
 internal static class ForkBootstrap {
 	private const string ValidationEnvironmentVariable = "RATSCANNER_VALIDATE_FALLBACK";
+	private const string ValidationLogFile = "ratscanner-fallback-validation.log";
 
 	private static readonly JsonSerializerSettings JsonSettings = new() {
 		MissingMemberHandling = MissingMemberHandling.Ignore,
@@ -30,17 +31,21 @@ internal static class ForkBootstrap {
 
 	[ModuleInitializer]
 	internal static void Initialize() {
+		bool validationMode = Environment.GetEnvironmentVariable(ValidationEnvironmentVariable) == "1";
 		bool fallbackPrepared = false;
 
 		try {
 			DisableOfficialUpdater();
 			fallbackPrepared = PrepareOfflineCaches();
-		} catch {
+		} catch (Exception exception) {
+			if (validationMode) {
+				File.WriteAllText(Path.Combine(Path.GetTempPath(), ValidationLogFile), exception.ToString());
+			}
 			// Startup must not fail because the fork bootstrap itself encountered an
 			// unexpected problem. The regular startup path will provide the normal log.
 		}
 
-		if (Environment.GetEnvironmentVariable(ValidationEnvironmentVariable) == "1") {
+		if (validationMode) {
 			Environment.Exit(fallbackPrepared ? 0 : 20);
 		}
 	}

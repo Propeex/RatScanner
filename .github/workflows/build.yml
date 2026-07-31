@@ -127,9 +127,13 @@ jobs:
         shell: pwsh
         run: |
           $env:RATSCANNER_VALIDATE_FALLBACK = "1"
-          & "./publish/RatScanner.exe"
-          if ($LASTEXITCODE -ne 0) {
-            throw "Bundled fallback validation failed with exit code $LASTEXITCODE"
+          $validation = Start-Process "./publish/RatScanner.exe" -Wait -PassThru
+          if ($validation.ExitCode -ne 0) {
+            $diagnosticPath = Join-Path $env:TEMP "ratscanner-fallback-validation.log"
+            if (Test-Path $diagnosticPath) {
+              Get-Content $diagnosticPath
+            }
+            throw "Bundled fallback validation failed with exit code $($validation.ExitCode)"
           }
 
       - name: Zip content

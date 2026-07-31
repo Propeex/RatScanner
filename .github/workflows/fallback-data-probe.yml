@@ -1,0 +1,30 @@
+name: Fallback data probe
+
+on:
+  push:
+    branches:
+      - fix/remove-updater-and-offline-items
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download JSON API snapshots
+        run: |
+          set -euxo pipefail
+          mkdir -p probe
+          curl --fail --location --retry 4 --retry-delay 5 https://json.tarkov.dev/regular/items -o probe/items.json
+          curl --fail --location --retry 4 --retry-delay 5 https://json.tarkov.dev/regular/items_en -o probe/items_en.json
+          python - <<'PY'
+          import json
+          for path in ('probe/items.json', 'probe/items_en.json'):
+              with open(path, encoding='utf-8') as f:
+                  data = json.load(f)
+              print(path, type(data).__name__, list(data)[:10])
+              print('bytes', __import__('os').path.getsize(path))
+          PY
+      - name: Upload probe data
+        uses: actions/upload-artifact@v4
+        with:
+          name: fallback-data-probe
+          path: probe/

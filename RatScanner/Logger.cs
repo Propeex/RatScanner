@@ -19,6 +19,7 @@ internal static class Logger {
 	private static bool Crashed = false;
 
 	internal static void LogInfo(string message) {
+		if (message == "Checking for updates...") return;
 		AppendToLog("[Info]  " + message);
 	}
 

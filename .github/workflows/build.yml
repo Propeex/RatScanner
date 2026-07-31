@@ -3,49 +3,70 @@ name: Build
 on:
   workflow_dispatch:
   push:
-    tags:
-      - v*
+    branches:
+      - master
   pull_request:
     branches:
       - master
       - main
       - dev
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
     steps:
-      - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
-      - run: echo "🔎 The name of the branch is ${{ github.ref }} and the repository is ${{ github.repository }}."
       - name: Checkout
         uses: actions/checkout@v5
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
-      - name: Restore Dependencies
+
+      - name: Read version
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Select-Xml -Path "RatScanner/RatScanner.csproj" -XPath "/Project/PropertyGroup/Version").Node.InnerText
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Restore dependencies
         run: dotnet restore
+
       - name: Publish
         run: dotnet publish RatScanner/RatScanner.csproj -c Release -o publish -p:PublishSingleFile=true --runtime win-x64 --self-contained
-      - name: Include Data
+
+      - name: Include data
+        shell: pwsh
         run: |
-          curl -L "https://github.com/RatScanner/RatScannerData/releases/latest/download/Data.zip" --output "publish/Data.zip"
+          curl.exe -L "https://github.com/RatScanner/RatScannerData/releases/latest/download/Data.zip" --output "publish/Data.zip"
           7z x publish/Data.zip -opublish/Data
           Remove-Item publish/Data.zip
-      - name: Include Updater
-        run: curl -L "https://github.com/RatScanner/RatUpdater/releases/latest/download/RatUpdater.exe" --output "publish/RatUpdater.exe"
-      - name: Zip Content
+
+      - name: Include updater
+        shell: pwsh
+        run: curl.exe -L "https://github.com/RatScanner/RatUpdater/releases/latest/download/RatUpdater.exe" --output "publish/RatUpdater.exe"
+
+      - name: Zip content
         run: 7z a -r RatScanner.zip ./publish/*
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: RatScanner
+          name: RatScanner-${{ steps.version.outputs.version }}
           path: ./publish/
-      - name: Draft Release
-        uses: softprops/action-gh-release@v1
+
+      - name: Publish release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: softprops/action-gh-release@v3
         with:
+          tag_name: v${{ steps.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: RatScanner v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          make_latest: true
+          fail_on_unmatched_files: true
           files: RatScanner.zip
-          draft: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        if: startsWith(github.ref, 'refs/tags/v') && github.event_name != 'pull_request'
-      

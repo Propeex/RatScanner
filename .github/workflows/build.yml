@@ -104,9 +104,24 @@ jobs:
           7z x publish/Data.zip -opublish/Data
           Remove-Item publish/Data.zip
 
-      - name: Include updater
+      - name: Include fallback API snapshots
         shell: pwsh
-        run: curl.exe -L "https://github.com/RatScanner/RatUpdater/releases/latest/download/RatUpdater.exe" --output "publish/RatUpdater.exe"
+        run: |
+          $fallbackDir = "publish/Data/api-fallback"
+          New-Item -ItemType Directory -Force -Path $fallbackDir | Out-Null
+          $files = @(
+            @{ Url = "https://json.tarkov.dev/regular/items"; Name = "regular-items.json" },
+            @{ Url = "https://json.tarkov.dev/regular/items_en"; Name = "regular-items-en.json" },
+            @{ Url = "https://json.tarkov.dev/pve/items"; Name = "pve-items.json" },
+            @{ Url = "https://json.tarkov.dev/pve/items_en"; Name = "pve-items-en.json" }
+          )
+
+          foreach ($file in $files) {
+            curl.exe --fail --location --retry 4 --retry-delay 5 $file.Url --output (Join-Path $fallbackDir $file.Name)
+            if ($LASTEXITCODE -ne 0) {
+              throw "Unable to download fallback API snapshot: $($file.Url)"
+            }
+          }
 
       - name: Zip content
         run: 7z a -r RatScanner.zip ./publish/*
@@ -116,6 +131,17 @@ jobs:
         with:
           name: RatScanner-${{ steps.version.outputs.version }}
           path: ./publish/
+
+      - name: Upload source snapshot
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: RatScanner-source-${{ github.sha }}
+          path: |
+            .
+            !.git/
+            !publish/
+            !RatScanner.zip
 
       - name: Publish release
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'

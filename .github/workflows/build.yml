@@ -34,7 +34,7 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore RatScanner/RatScanner.csproj --runtime win-x64
 
       - name: Publish with GraphQL schema retry
         shell: pwsh
